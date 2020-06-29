@@ -24,6 +24,12 @@ This is the official implementation of the paper "Global and Local Attention-Bas
 ### Some Results
 - Places dataset
 ![alt text](img/places.png)
+- ImageNet dataset
+![alt text](img/imagenet.png)
+- CelebA dataset
+![alt text](img/celeba.png)
+- Ablation study of the modules
+![alt text](img/ablation.png)
 
 
 
@@ -43,4 +49,4 @@ If you find our paper and code beneficial for your work, please consider citing 
 }
 
 #### Acknowledgement
-- Code base: This code is heavily relied on [this repo](https://github.com/daa233/generative-inpainting-pytorch). I can not thank enough.
+- Code base: This code is heavily relied on [this repo](https://github.com/daa233/generative-inpainting-pytorch). Kudus!!!
