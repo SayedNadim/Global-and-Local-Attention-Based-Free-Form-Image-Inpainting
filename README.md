@@ -18,7 +18,7 @@ This is the official implementation of the paper "Global and Local Attention-Bas
 
 ### How to test
 - Modify "test_single.py" as per need and run.
-- I will upload bulk test code soon.
+- Bulk testing code will be uploaded soon.
 - Pretrained models will be uploaded soon. 
 
 ### Some Results
