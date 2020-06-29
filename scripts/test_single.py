@@ -8,7 +8,7 @@ import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
 import torchvision.utils as vutils
 
-from model.networks_chord import Generator
+from model.network import Generator
 from utils.tools import get_config, test_bbox, mask_image, is_image_file, default_loader, normalize
 
 

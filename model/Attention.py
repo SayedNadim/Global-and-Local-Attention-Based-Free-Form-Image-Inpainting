@@ -206,8 +206,6 @@ class GlobalAttention(nn.Module):
 
         feature_pruning = feature_similarity * mask
         attention = self.softmax(feature_pruning)  # B, N, C
-
-        # feature_similarity * mask
         feature_pruning = torch.bmm(self.value_conv(a).view(m_batchsize, -1, width * height),
                                     attention.permute(0, 2, 1))  # -. B, C, N
         out = feature_pruning.view(m_batchsize, C, width, height)  # B, C, H, W

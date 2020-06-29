@@ -10,7 +10,7 @@ import torch.backends.cudnn as cudnn
 from tensorboardX import SummaryWriter
 
 from scripts.trainer import Trainer
-from data.dataset import Dataset
+from data.dataset_loader import Dataset
 from utils.tools import get_config
 from utils.logger import get_logger
 from model.mask import mask_image

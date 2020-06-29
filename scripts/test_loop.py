@@ -11,7 +11,7 @@ import fnmatch
 import numpy as np
 import cv2
 import re
-from model.networks_chord import Generator
+from model.network import Generator
 from utils.tools import get_config, test_bbox, random_bbox, mask_image, is_image_file, default_loader, normalize, get_model_list
 
 
