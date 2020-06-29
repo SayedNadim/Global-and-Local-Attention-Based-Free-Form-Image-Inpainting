@@ -22,3 +22,11 @@ This is the official implementation of the paper "Global and Local Attention-Bas
 - Pretrained models will be uploaded soon. 
 
 ### Some Results
+
+
+
+
+
+
+#### Acknowledgement
+- Code base: This code is heavily relied on [this repo](https://github.com/daa233/generative-inpainting-pytorch). I can not thank enough.
