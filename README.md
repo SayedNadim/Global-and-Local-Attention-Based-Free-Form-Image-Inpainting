@@ -8,6 +8,22 @@ This is the official implementation of the paper "Global and Local Attention-Bas
 - Torchvision 0.2+
 - PyYaml
 
+
+### Citation
+If you find our paper and code beneficial for your work, please consider citing us!
+
+@article{uddin2020global,
+  title={Global and Local Attention-Based Free-Form Image Inpainting},
+  author={Uddin, SM and Jung, Yong Ju},
+  journal={Sensors},
+  volume={20},
+  number={11},
+  pages={3204},
+  year={2020},
+  publisher={Multidisciplinary Digital Publishing Institute}
+}
+
+
 ### How to train
 - Set directory path in "configs/config.yaml". 
 -- Set dataset name, if needed. 
@@ -31,22 +47,5 @@ This is the official implementation of the paper "Global and Local Attention-Bas
 - Ablation study of the modules
 ![alt text](img/ablation.png)
 
-
-
-
-### Citation
-If you find our paper and code beneficial for your work, please consider citing us!
-""
-@article{uddin2020global,
-  title={Global and Local Attention-Based Free-Form Image Inpainting},
-  author={Uddin, SM and Jung, Yong Ju},
-  journal={Sensors},
-  volume={20},
-  number={11},
-  pages={3204},
-  year={2020},
-  publisher={Multidisciplinary Digital Publishing Institute}
-}
-""
 #### Acknowledgement
 - Code base: This code is heavily relied on [this repo](https://github.com/daa233/generative-inpainting-pytorch). Kudus!!!
