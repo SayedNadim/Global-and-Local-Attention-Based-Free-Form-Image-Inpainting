@@ -22,8 +22,8 @@ This is the official implementation of the paper "Global and Local Attention-Bas
 - Pretrained models will be uploaded soon. 
 
 ### Some Results
-
-
+- Places dataset
+![alt text](img/places.png)
 
 
 
