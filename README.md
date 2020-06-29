@@ -28,5 +28,19 @@ This is the official implementation of the paper "Global and Local Attention-Bas
 
 
 
+### Citation
+If you find our paper and code beneficial for your work, please consider citing us!
+
+@article{uddin2020global,
+  title={Global and Local Attention-Based Free-Form Image Inpainting},
+  author={Uddin, SM and Jung, Yong Ju},
+  journal={Sensors},
+  volume={20},
+  number={11},
+  pages={3204},
+  year={2020},
+  publisher={Multidisciplinary Digital Publishing Institute}
+}
+
 #### Acknowledgement
 - Code base: This code is heavily relied on [this repo](https://github.com/daa233/generative-inpainting-pytorch). I can not thank enough.
