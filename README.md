@@ -25,7 +25,7 @@ If you find our paper and code beneficial for your work, please consider citing 
 
 
 ### How to train
-- train and test files can be found under "scripts" folder.
+- Train and test files can be found under "scripts" folder.
 - Set directory path in "configs/config.yaml". 
 -- Set dataset name, if needed. 
 -- If the dataset has subfolders, set "data_with_subfolder" to "True".
