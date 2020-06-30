@@ -11,8 +11,7 @@ This is the official implementation of the paper "Global and Local Attention-Bas
 
 ### Citation
 If you find our paper and code beneficial for your work, please consider citing us!
-
---
+<br>
 @article{uddin2020global,
   title={Global and Local Attention-Based Free-Form Image Inpainting},
   author={Uddin, SM and Jung, Yong Ju},
@@ -23,8 +22,7 @@ If you find our paper and code beneficial for your work, please consider citing 
   year={2020},
   publisher={Multidisciplinary Digital Publishing Institute}
 }
-
---
+</br>
 
 ### How to train
 - Set directory path in "configs/config.yaml". 
