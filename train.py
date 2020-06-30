@@ -16,7 +16,7 @@ from utils.logger import get_logger
 from model.mask import mask_image
 
 parser = ArgumentParser()
-parser.add_argument('--config', type=str, default='/home/nadim/Clean_Codes/Journal_codes/configs/config.yaml',
+parser.add_argument('--config', type=str, default='configs/config.yaml',
                     help="training configuration")
 parser.add_argument('--seed', type=int, default="2019", help='manual seed')
 parser.add_argument('--iteration', type=int, default="0", help='resume iteration number')

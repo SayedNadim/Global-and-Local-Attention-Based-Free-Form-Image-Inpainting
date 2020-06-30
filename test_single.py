@@ -13,14 +13,14 @@ from utils.tools import get_config, test_bbox, mask_image, is_image_file, defaul
 
 
 parser = ArgumentParser()
-parser.add_argument('--config', type=str, default='/home/nadim/Clean_Codes/Journal_codes/configs/test.yaml',
+parser.add_argument('--config', type=str, default='configs/test.yaml',
                     help="training configuration")
 parser.add_argument('--seed', type=int, default = '2019', help='manual seed')
-parser.add_argument('--image', type=str, default='/home/nadim/Clean_Codes/Journal_codes/example/image/image.jpg')
-parser.add_argument('--mask', type=str, default='/home/nadim/Clean_Codes/Journal_codes/example/mask/mask.png')
-parser.add_argument('--output', type=str, default='/home/nadim/Clean_Codes/Journal_codes/example/output/output.png')
+parser.add_argument('--image', type=str, default='example/image/image.jpg')
+parser.add_argument('--mask', type=str, default='example/mask/mask.png')
+parser.add_argument('--output', type=str, default='output/output.png')
 parser.add_argument('--flow', type=str, default='')
-parser.add_argument('--checkpoint_path', type=str, default='/home/nadim/Code_Ground/local_global_attention/checkpoints/Places/hole_benchmark')
+parser.add_argument('--checkpoint_path', type=str, default='')
 parser.add_argument('--iter', type=int, default=0)
 
 def main():
