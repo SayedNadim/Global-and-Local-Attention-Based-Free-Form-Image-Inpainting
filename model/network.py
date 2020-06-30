@@ -264,7 +264,7 @@ def dis_conv(input_dim, output_dim, kernel_size=5, stride=2, padding=0, rate=1,
 class Conv2dBlock(nn.Module):
     def __init__(self, input_dim, output_dim, kernel_size, stride, padding=0,
                  conv_padding=0, dilation=1, weight_norm='none', norm='none',
-                 activation='lrelu', pad_type='zero', transpose=False):
+                 activation='lrelu', pad_type='zeros', transpose=False):
         super(Conv2dBlock, self).__init__()
         self.use_bias = True
         # initialize padding
@@ -272,7 +272,7 @@ class Conv2dBlock(nn.Module):
             self.pad = nn.ReflectionPad2d(padding)
         elif pad_type == 'replicate':
             self.pad = nn.ReplicationPad2d(padding)
-        elif pad_type == 'zero':
+        elif pad_type == 'zeros':
             self.pad = nn.ZeroPad2d(padding)
         elif pad_type == 'none':
             self.pad = None
