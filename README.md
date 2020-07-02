@@ -30,9 +30,9 @@ If you find our paper and code beneficial for your work, please consider citing 
 - Set directory path in "configs/config.yaml". 
 -- Set dataset name, if needed. 
 -- If the dataset has subfolders, set "data_with_subfolder" to "True".
--- Run <br>
+- Run
 ``` python train.py --config configs/config.yaml ```
--- To resume, set "resume" to True in "configs/config.yaml". Currently it overwrites the previous checkpoints. Updated code will have checkpoints listed.
+- To resume, set "resume" to True in "configs/config.yaml". Currently it overwrites the previous checkpoints. Updated code will have checkpoints listed.
 - To view training, run <br>
 ```tensorboard --logdir checkpoints/DATASET_NAME/hole_benchmark ```
 
