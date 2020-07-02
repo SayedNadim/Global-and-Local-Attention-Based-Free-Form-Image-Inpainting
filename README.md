@@ -32,7 +32,8 @@ If you find our paper and code beneficial for your work, please consider citing 
 -- If the dataset has subfolders, set "data_with_subfolder" to "True".
 - Checkpoints can be found under "scripts" folder.
 -- To resume, set "resume" to True in "configs/config.yaml". Currently it overwrites the previous checkpoints. Updated code will have checkpoints listed.
-- To view training, run - "tensorboard --logdir scripts/checkpoints/DATASET_NAME/hole_benchmark".
+- To view training, run <br>
+```tensorboard --logdir checkpoints/DATASET_NAME/hole_benchmark ```
 
 ### How to test
 - Modify "test_single.py" as per need and run.
