@@ -21,8 +21,8 @@ class GlobalLocalAttention(nn.Module):
         self.query_conv_p = nn.Conv2d(in_channels=in_dim, out_channels=in_dim // 8, kernel_size=1)
         self.key_conv_p = nn.Conv2d(in_channels=in_dim, out_channels=in_dim // 8, kernel_size=1)
         self.value_conv_p = nn.Conv2d(in_channels=in_dim, out_channels=in_dim, kernel_size=1)
-        self.beta = torch.tensor([1.0], requires_grad=True).cuda()
-        self.beta_2 = torch.tensor([1.0], requires_grad=True).cuda()
+        self.beta = nn.Parameter(torch.tensor([1.0]), requires_grad=True).cuda()
+        self.beta_2 = nn.Parameter(torch.tensor([1.0]), requires_grad=True).cuda()
 
     def forward(self, f, b, mask=None):
         # get shapes
@@ -182,7 +182,7 @@ class GlobalAttention(nn.Module):
         self.value_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim, kernel_size=1)
         self.softmax = nn.Softmax(dim=-1)  #
         self.rate = 1
-        self.gamma = torch.nn.Parameter(torch.Tensor([1.0]))
+        self.gamma = torch.nn.Parameter(torch.Tensor([1.0]), requires_grad = True)
         self.gamma.requires_grad = True
 
     def forward(self, a, b, c):
