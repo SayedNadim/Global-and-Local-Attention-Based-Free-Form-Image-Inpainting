@@ -15,14 +15,8 @@ class GlobalLocalAttention(nn.Module):
         self.softmax_scale = softmax_scale
         self.fuse = fuse
         self.chanel_in = in_dim
-        self.query_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim // 8, kernel_size=1)
-        self.key_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim // 8, kernel_size=1)
-        self.value_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim, kernel_size=1)
-        self.query_conv_p = nn.Conv2d(in_channels=in_dim, out_channels=in_dim // 8, kernel_size=1)
-        self.key_conv_p = nn.Conv2d(in_channels=in_dim, out_channels=in_dim // 8, kernel_size=1)
-        self.value_conv_p = nn.Conv2d(in_channels=in_dim, out_channels=in_dim, kernel_size=1)
-        self.beta = nn.Parameter(torch.tensor([1.0]), requires_grad=True).cuda()
-        self.beta_2 = nn.Parameter(torch.tensor([1.0]), requires_grad=True).cuda()
+        self.feature_attention = GlobalAttention(in_dim)
+        self.patch_attention = GlobalAttention(in_dim)
 
     def forward(self, f, b, mask=None):
         # get shapes
@@ -110,36 +104,14 @@ class GlobalLocalAttention(nn.Module):
             wi = wi[0]
             # Patch Level Global Attention
             m_batchsize_p, C_p, width_p, height_p = fi.size()
-            proj_query_p = self.query_conv_p(fi).view(m_batchsize_p, -1, width_p * height_p).permute(0, 2,
-                                                                                                     1)  # B, C, N -> B N C
-            proj_key_p = self.key_conv(wi).view(m_batchsize_p, -1, width_p * height_p)  # B, C, N
-            feature_similarity_p = torch.bmm(proj_query_p, proj_key_p)  # B, N, N
-
-            mask_raw_p = m.view(m_batchsize_p, -1, width_p * height_p)  # B, C, N
-            feature_pruning_p = feature_similarity_p * mask_raw_p
-            attention_p = F.softmax(feature_pruning_p, dim=-1)  # B, N, C
-            feature_final_p = torch.bmm(self.value_conv_p(fi).view(m_batchsize_p, -1, width_p * height_p),
-                                        attention_p.permute(0, 2, 1))  # -. B, C, N
-            final_pruning_p = feature_final_p.view(m_batchsize_p, C_p, width_p, height_p)  # B, C, H, W
-            final_pruning_p = self.beta_2 * fi * m + (1.0 - m) * final_pruning_p
+            final_pruning_p = self.patch_attention(fi, wi, m)
             max_wi = torch.max(torch.sqrt(reduce_sum(torch.pow(final_pruning_p, 2), axis=[1, 2, 3], keepdim=True)),
                                escape_NaN)
             wi_normed = final_pruning_p / max_wi
 
             # # Global Attention
             m_batchsize, C, width, height = xi.size()  # B, C, H, W
-            proj_query = self.query_conv(xi).view(m_batchsize, -1, width * height).permute(0, 2, 1)  # B, C, N -> B N C
-            proj_key = self.key_conv(bi).view(m_batchsize, -1, width * height)  # B, C, N
-            feature_similarity = torch.bmm(proj_query, proj_key)  # B, N, N
-
-            mask_raw = mask.view(m_batchsize, -1, width * height)  # B, C, N
-            mask_raw = mask_raw.repeat(1, height * width, 1).permute(0, 2, 1)  # B, 1, H, W -> B, C, H, W //
-            feature_pruning = feature_similarity * mask_raw
-            attention = F.softmax(feature_pruning, dim=-1)  # B, N, C
-            feature_final = torch.bmm(self.value_conv(xi).view(m_batchsize, -1, width * height),
-                                      attention.permute(0, 2, 1))  # -. B, C, N
-            final_pruning = feature_final.view(m_batchsize, C, width, height)  # B, C, H, W
-            final_pruning = self.beta * xi * mask + (1.0 - mask) * final_pruning
+            final_pruning = self.feature_attention(xi, bi, mask)
             final_pruning = same_padding(final_pruning, [self.ksize, self.ksize], [1, 1], [1, 1])  # xi: 1*c*H*W
             yi = F.conv2d(final_pruning, wi_normed, stride=1)  # [1, L, H, W]
             if self.fuse:
@@ -177,8 +149,8 @@ class GlobalAttention(nn.Module):
         super(GlobalAttention, self).__init__()
         self.chanel_in = in_dim
 
-        self.query_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim // 8, kernel_size=1)
-        self.key_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim // 8, kernel_size=1)
+        self.query_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim, kernel_size=1)
+        self.key_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim, kernel_size=1)
         self.value_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim, kernel_size=1)
         self.softmax = nn.Softmax(dim=-1)  #
         self.rate = 1

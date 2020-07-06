@@ -145,7 +145,7 @@ def main():
 
             if iteration % (config['viz_iter']) == 0:
                 ims = torch.cat([x, coarse_result, inpainted_result, ground_truth], dim=3)
-                writer.add_images('raw_masked_coarse_refine', denorm(ims), iteration + 1)
+                writer.add_images('raw_masked_coarse_refine', denorm(ims), iteration)
             # if iteration % (config['save_image']) ==0:
             #     viz_max_out = config['viz_max_out']
             #     if x.size(0) > viz_max_out:
