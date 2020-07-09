@@ -9,7 +9,7 @@ import torchvision.transforms as transforms
 import torchvision.utils as vutils
 
 from model.network import Generator
-from utils.tools import get_config, test_bbox, mask_image, is_image_file, default_loader, normalize
+from utils.tools import get_config, mask_image, is_image_file, default_loader, normalize
 
 
 parser = ArgumentParser()
