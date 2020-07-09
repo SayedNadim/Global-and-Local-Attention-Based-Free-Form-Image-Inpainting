@@ -4,7 +4,7 @@ This is the official implementation of the paper "Global and Local Attention-Bas
 
 ### Prerequisite
 - Python3
-- PyTorch 1.0+
+- PyTorch 1.0+ (The code works up to PyTorch 1.4. There seems to be an auto-grad problem with PyTorch 1.5. I will update the code for PyTorch 1.5 after finding the underlying issue.)
 - Torchvision 0.2+
 - PyYaml
 
