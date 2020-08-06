@@ -37,15 +37,12 @@ class Masks():
 
 def mask_image(x, config):
     height, width, _ = config['image_shape']
-    mask = torch.ones_like(x)
-    temp = torch.ones_like(x)
+    mask = torch.ones(x.size(0), 1, x.size(2), x.size(3))
+    temp = torch.ones(x.size(0), 1, x.size(2), x.size(3))
     for i in range(x.size(0)):
         mask_temp = Masks.get_ff_mask(height, width)
+        mask_temp = torch.from_numpy(mask_temp)
         mask[i,:,:,:] = temp[i,:,:,:] * mask_temp
-#         mask_all.append(mask)
-#     mask = torch.from_numpy(np.asarray(mask_all)).unsqueeze(1).float()
-#     ones = torch.ones(x.size(0), 1, x.size(2), x.size(3))
-#     mask = ones * mask
     if x.is_cuda:
         mask = mask.cuda()
     result = x * (1. - mask)
