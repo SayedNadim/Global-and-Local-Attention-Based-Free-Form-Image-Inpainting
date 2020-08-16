@@ -1,9 +1,9 @@
 # data parameters
 dataset_name: Places
 data_with_subfolder: True
-train_data_path: /home/nadim/data_places/train_large
+train_data_path: /media/cvip/Seagate Backup Plus Drive/Places365_High_Resolution/train_large
 resume: False
-checkpoint_dir: /home/nadim/Code_Ground/local_global_attention/checkpoints/Places/hole_benchmark
+checkpoint_dir: /media/cvip/Seagate Backup Plus Drive/Journal_Places/Global-and-Local-Attention-Based-Free-Form-Image-Inpainting/checkpoints/Places/hole_benchmark
 batch_size: 4
 image_shape: [256, 256, 3]
 mask_shape: [128, 128]
@@ -18,14 +18,14 @@ mosaic_unit_size: 12
 save_image: 500
 
 # training parameters
-expname: benchmark
+expname: v1
 cuda: True
-gpu_ids: [0]  # set the GPU ids to use, e.g. [0] or [1, 2]
+gpu_ids: [1]  # set the GPU ids to use, e.g. [0] or [1, 2]
 num_workers: 4
 lr: 0.0001
 beta1: 0.5
 beta2: 0.9
-niter: 500000
+niter: 1000000
 print_iter: 100
 viz_iter: 100
 viz_max_out: 16
