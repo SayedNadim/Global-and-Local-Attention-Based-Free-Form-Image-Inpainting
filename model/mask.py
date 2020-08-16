@@ -7,17 +7,17 @@ import torch
 import torch.nn.functional as F
 import math
 
-def random_mask(max_mask,
-                height=256,
+
+def random_mask(height=256,
                 width=256,
                 max_vertex=15,
+                max_stroke=5,
                 max_brush_width=40,
-                max_length=200):
+                max_length=150):
     mask = np.zeros((height, width))
-    mask_all = []
     max_angle = np.pi
-    for mn in range(max_mask):
-        num_vertex = int(np.random.uniform(max_vertex//3, max_vertex))
+    for mn in range(max_stroke):
+        num_vertex = int(np.random.uniform(max_vertex // 3, max_vertex))
         start_x = int(np.random.uniform(0, height))
         start_y = int(np.random.uniform(0, width))
 
@@ -40,33 +40,20 @@ def random_mask(max_mask,
             start_y = end_y
 
             # cv2.circle(mask, (447, 63), brush_width // 4, 255, -1)
-
-        if np.random.uniform(0.0, 1.0) > 0.5:
-            mask = np.fliplr(mask)
-
-        if np.random.uniform(0.0, 1.0) > 0.5:
-            mask = np.flipud(mask)
         # mask = mask // 255
-        mask_all.append(mask)
-    batched_mask = torch.tensor(mask_all, dtype=torch.float32).unsqueeze(1)
-    return batched_mask
+    return mask
+
 
 def mask_image(x, config):
     height, width, _ = config['image_shape']
     max_mask = x.shape[0]
-    mask = random_mask(max_mask)
-    if x.is_cuda:
-        mask = mask.cuda()
-
-    if config['mask_type'] == 'hole':
-        result = x * (1. - mask)
-    elif config['mask_type'] == 'mosaic':
-        # TODO: Matching the mosaic patch size and the mask size
-        mosaic_unit_size = config['mosaic_unit_size']
-        downsampled_image = F.interpolate(x, scale_factor=1. / mosaic_unit_size, mode='nearest')
-        upsampled_image = F.interpolate(downsampled_image, size=(height, width), mode='nearest')
-        result = upsampled_image * mask + x * (1. - mask)
-    else:
-        raise NotImplementedError('Not implemented mask type.')
-
+    result = torch.ones_like(x)
+    mask = torch.ones(size=[x.shape[0], 1, x.shape[2], x.shape[3]])
+    for i in range(max_mask):
+        mask_temp = random_mask(height=height, width=width)
+        mask_temp = torch.tensor(mask_temp, dtype=torch.float32)
+        if x.is_cuda:
+            mask_temp.cuda()
+        result[i, :, :, :] = x[i, :, :, :] * (1. - mask_temp)
+        mask[i, :, :, :] = mask[i, :, :, :] * mask_temp
     return result, mask
