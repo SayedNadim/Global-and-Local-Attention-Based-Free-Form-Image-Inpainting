@@ -142,8 +142,7 @@ class FineGenerator(nn.Module):
         # cnum*4 x 64 x 64
         self.pmconv5 = gen_conv(cnum * 4, cnum * 4, 3, 1, 1)
         self.pmconv6 = gen_conv(cnum * 4, cnum * 4, 3, 1, 1, activation='relu')
-        self.contextul_attention = GlobalLocalAttention(in_dim=128, ksize=3, stride=1, rate=2, fuse_k=3, softmax_scale=10,
-                                                       fuse=True, use_cuda=self.use_cuda, device_ids=self.device_ids)
+        self.contextul_attention = GlobalLocalAttention(in_dim=128)
         self.pmconv9 = gen_conv(cnum * 4, cnum * 4, 3, 1, 1)
         self.pmconv10 = gen_conv(cnum * 4, cnum * 4, 3, 1, 1)
 
@@ -184,7 +183,7 @@ class FineGenerator(nn.Module):
         x = self.pmconv4_downsample(x)
         x = self.pmconv5(x)
         x = self.pmconv6(x)
-        x = self.contextul_attention(x, x, mask)
+        x = self.contextul_attention(x,mask)
         x = self.pmconv9(x)
         x = self.pmconv10(x)
         pm = x
@@ -212,14 +211,14 @@ class GlobalDis(nn.Module):
         self.device_ids = device_ids
 
         self.dis_conv_module = DisConvModule(self.input_dim, self.cnum)
-        self.linear = nn.Linear(self.cnum * 4 * 8 * 8, 1)
-        self.dropout = nn.Dropout(p=0.2)
+        # self.linear = nn.Linear(self.cnum * 4 * 8 * 8, 1)
+        # self.dropout = nn.Dropout(p=0.2)
 
     def forward(self, x):
         x = self.dis_conv_module(x)
-        x = self.dropout(x)
-        x = x.view(x.size()[0], -1)
-        x = self.linear(x)
+        # x = self.dropout(x)
+        # x = x.view(x.size()[0], -1)
+        # x = self.linear(x)
 
         return x
 

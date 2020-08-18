@@ -4,147 +4,70 @@ from utils.tools import *
 
 
 class GlobalLocalAttention(nn.Module):
-    def __init__(self, in_dim, ksize=3, stride=1, rate=1, fuse_k=3, softmax_scale=10,
-                 fuse=True, use_cuda=True, device_ids=None):
+    def __init__(self, in_dim, patch_size=3, propagate_size=3, stride=1):
         super(GlobalLocalAttention, self).__init__()
-        self.ksize = ksize
+        self.patch_size = patch_size
+        self.propagate_size = propagate_size
         self.stride = stride
-        self.rate = rate
-        self.fuse_k = fuse_k
-        self.use_cuda = use_cuda
-        self.softmax_scale = softmax_scale
-        self.fuse = fuse
-        self.chanel_in = in_dim
+        self.prop_kernels = None
+        self.in_dim = in_dim
         self.feature_attention = GlobalAttention(in_dim)
-        self.patch_attention = GlobalAttention(in_dim)
+        self.patch_attention = GlobalAttentionPatch(in_dim)
 
-    def forward(self, f, b, mask=None):
-        # get shapes
-        raw_int_fs = list(f.size())  # b*c*h*w
-        raw_int_bs = list(b.size())  # b*c*h*w
+    def forward(self, foreground, mask, background="same"):
+        ###assume the masked area has value 1
+        bz, nc, w, h = foreground.size()
+        if background == "same":
+            background = foreground.clone()
+        mask = F.interpolate(mask, size=(h, w), mode='nearest')
+        background = background * (1 - mask)
+        foreground = self.feature_attention(foreground, background, mask)
+        background = F.pad(background,
+                           [self.patch_size // 2, self.patch_size // 2, self.patch_size // 2, self.patch_size // 2])
+        conv_kernels_all = background.unfold(2, self.patch_size, self.stride).unfold(3, self.patch_size,
+                                                                                     self.stride).contiguous().view(bz,
+                                                                                                                    nc,
+                                                                                                                    -1,
+                                                                                                                    self.patch_size,
+                                                                                                                    self.patch_size)
 
-        # extract patches from background with stride and rate
-        kernel = 2 * self.rate
-        # raw_w is extracted for reconstruction
-        raw_w = extract_image_patches(b, ksizes=[kernel, kernel],
-                                      strides=[self.rate * self.stride,
-                                               self.rate * self.stride],
-                                      rates=[1, 1],
-                                      padding='same')  # [N, C*k*k, L]
-        # raw_shape: [N, C, k, k, L]
-        raw_w = raw_w.view(raw_int_bs[0], raw_int_bs[1], kernel, kernel, -1)
-        raw_w = raw_w.permute(0, 4, 1, 2, 3)  # raw_shape: [N, L, C, k, k]
-        raw_w_groups = torch.split(raw_w, 1, dim=0)
+        mask_resized = mask.repeat(1, self.in_dim, 1, 1)
+        mask_resized = F.pad(mask_resized,
+                             [self.patch_size // 2, self.patch_size // 2, self.patch_size // 2, self.patch_size // 2])
+        mask_kernels_all = mask_resized.unfold(2, self.patch_size, self.stride).unfold(3, self.patch_size,
+                                                                                       self.stride).contiguous().view(
+            bz,
+            nc,
+            -1,
+            self.patch_size,
+            self.patch_size)
+        conv_kernels_all = conv_kernels_all.transpose(2, 1)
+        mask_kernels_all = mask_kernels_all.transpose(2, 1)
+        output_tensor = []
+        for i in range(bz):
+            feature_map = foreground[i:i + 1]
 
-        # downscaling foreground option: downscaling both foreground and
-        # background for matching and use original background for reconstruction.
-        f = F.interpolate(f, scale_factor=1. / self.rate, mode='nearest')
-        b = F.interpolate(b, scale_factor=1. / self.rate, mode='nearest')
-        int_fs = list(f.size())  # b*c*h*w
-        int_bs = list(b.size())
-        f_groups = torch.split(f, 1, dim=0)  # split tensors along the batch dimension
-        b_groups = torch.split(b, 1, dim=0)  # split tensors along the batch dimension
+            # form convolutional kernels
+            conv_kernels = conv_kernels_all[i] + 0.0000001
+            mask_kernels = mask_kernels_all[i]
+            conv_kernels = self.patch_attention(conv_kernels, conv_kernels, mask_kernels)
+            norm_factor = torch.sum(conv_kernels ** 2, [1, 2, 3], keepdim=True) ** 0.5
+            conv_kernels = conv_kernels / norm_factor
 
+            conv_result = F.conv2d(feature_map, conv_kernels, padding=self.patch_size // 2)
+            if self.propagate_size != 1:
+                if self.prop_kernels is None:
+                    self.prop_kernels = torch.ones([conv_result.size(1), 1, self.propagate_size, self.propagate_size])
+                    self.prop_kernels.requires_grad = False
+                    self.prop_kernels = self.prop_kernels.cuda()
+                conv_result = F.conv2d(conv_result, self.prop_kernels, stride=1, padding=1, groups=conv_result.size(1))
+            attention_scores = F.softmax(conv_result, dim=1)
+            ##propagate the scores
+            recovered_foreground = F.conv_transpose2d(attention_scores, conv_kernels, stride=1,
+                                                      padding=self.patch_size // 2)
+            output_tensor.append(recovered_foreground)
+        return torch.cat(output_tensor, dim=0)
 
-        # process mask
-        if mask is None:
-            mask = torch.zeros([int_bs[0], 1, int_bs[2], int_bs[3]])
-            if self.use_cuda:
-                mask = mask.cuda()
-        else:
-            down_rate = mask.shape[2] // int_bs[2]
-            mask = F.interpolate(mask, scale_factor=1. / (down_rate), mode='nearest')
-            if self.use_cuda:
-                mask = mask.cuda()
-
-        f = self.feature_attention(f, b, mask)
-
-        # w shape: [N, C*k*k, L]
-        w = extract_image_patches(b, ksizes=[self.ksize, self.ksize],
-                                  strides=[self.stride, self.stride],
-                                  rates=[1, 1],
-                                  padding='same')
-        # w shape: [N, C, k, k, L]
-        w = w.view(int_bs[0], int_bs[1], self.ksize, self.ksize, -1)
-        w = w.permute(0, 4, 1, 2, 3)  # w shape: [N, L, C, k, k]
-        w_groups = torch.split(w, 1, dim=0)
-
-        fw = extract_image_patches(f, ksizes=[self.ksize, self.ksize],
-                                   strides=[self.stride, self.stride],
-                                   rates=[1, 1],
-                                   padding='same')
-        # w shape: [N, C, k, k, L]
-        fw = fw.view(int_fs[0], int_fs[1], self.ksize, self.ksize, -1)
-        fw = fw.permute(0, 4, 1, 2, 3)  # w shape: [N, L, C, k, k]
-        fw_groups = torch.split(fw, 1, dim=0)
-
-
-        m_groups = torch.split(mask, 1, dim=0)  # split tensors along the batch dimension
-        mask = m_groups[0]
-        int_ms = list(mask.size())
-        # m shape: [N, C*k*k, L]
-        m = extract_image_patches(mask, ksizes=[self.ksize, self.ksize],
-                                  strides=[self.stride, self.stride],
-                                  rates=[1, 1],
-                                  padding='same')
-        # m shape: [N, C, k, k, L]
-        m = m.view(int_ms[0], int_ms[1], self.ksize, self.ksize, -1)
-        m = m.permute(0, 4, 1, 2, 3)  # m shape: [N, L, C, k, k]
-        m = m[0]  # m shape: [L, C, k, k]
-        # mm shape: [L, 1, 1, 1]
-        mm = (reduce_mean(m, axis=[1, 2, 3], keepdim=True) == 0.).to(torch.float32)
-        mm = mm.permute(1, 0, 2, 3)  # mm shape: [1, L, 1, 1]
-
-        y = []
-        k = self.fuse_k
-        scale = self.softmax_scale  # to fit the PyTorch tensor image value range
-        fuse_weight = torch.eye(k).view(1, 1, k, k)  # 1*1*k*k
-        fuse_weight = fuse_weight.cuda()
-
-        for xi, bi, fi, wi, raw_wi in zip(f_groups, b_groups, fw_groups, w_groups, raw_w_groups):
-            escape_NaN = torch.FloatTensor([1e-4])
-            if self.use_cuda:
-                escape_NaN = escape_NaN.cuda()
-
-            # Selecting patches
-            fi = fi[0]
-            wi = wi[0]
-            # Patch Level Global Attention
-            final_pruning_p = self.patch_attention(wi, fi, m)
-            max_wi = torch.max(torch.sqrt(reduce_sum(torch.pow(final_pruning_p, 2), axis=[1, 2, 3], keepdim=True)),
-                               escape_NaN)
-            wi_normed = final_pruning_p / max_wi
-
-            # # Global Attention
-            final_pruning = same_padding(xi, [self.ksize, self.ksize], [1, 1], [1, 1])  # xi: 1*c*H*W
-            yi = F.conv2d(final_pruning, wi_normed, stride=1)  # [1, L, H, W]
-            if self.fuse:
-                # make all of depth to spatial resolution
-                yi = yi.view(1, 1, int_bs[2] * int_bs[3], int_fs[2] * int_fs[3])  # (B=1, I=1, H=32*32, W=32*32)
-                yi = same_padding(yi, [k, k], [1, 1], [1, 1])
-                yi = F.conv2d(yi, fuse_weight, stride=1)  # (B=1, C=1, H=32*32, W=32*32)
-                yi = yi.contiguous().view(1, int_bs[2], int_bs[3], int_fs[2], int_fs[3])  # (B=1, 32, 32, 32, 32)
-                yi = yi.permute(0, 2, 1, 4, 3)
-                yi = yi.contiguous().view(1, 1, int_bs[2] * int_bs[3], int_fs[2] * int_fs[3])
-                yi = same_padding(yi, [k, k], [1, 1], [1, 1])
-                yi = F.conv2d(yi, fuse_weight, stride=1)
-                yi = yi.contiguous().view(1, int_bs[3], int_bs[2], int_fs[3], int_fs[2])
-                yi = yi.permute(0, 2, 1, 4, 3).contiguous()
-            yi = yi.view(1, int_bs[2] * int_bs[3], int_fs[2], int_fs[3])  # (B=1, C=32*32, H=32, W=32)
-            # # softmax to match
-            yi = yi * mm
-            yi = F.softmax(yi * scale, dim=1)
-            yi = yi * mm
-            # deconv for patch pasting
-            wi_center = raw_wi[0]
-            yi = F.conv_transpose2d(yi, wi_center, stride=self.rate, padding=1) / 4.  # (B=1, C=128, H=64, W=64)
-            y.append(yi)
-
-        y = torch.cat(y, dim=0)  # back to the mini-batch
-        # y = F.pad(y, [0, 1, 0, 1])  # here may need conv_transpose same padding
-        y.contiguous().view(raw_int_fs)
-
-        return y
 
 class GlobalAttention(nn.Module):
     """ Self attention Layer"""
@@ -161,14 +84,6 @@ class GlobalAttention(nn.Module):
         self.gamma = torch.tensor([1.0], requires_grad=True).cuda()
 
     def forward(self, a, b, c):
-        """
-            inputs :
-                x : input feature maps( B X C X W X H)
-                c : B * 1 * W * H
-            returns :
-                out : self attention value + input feature
-                attention: B X N X N (N is Width*Height)
-        """
         m_batchsize, C, width, height = a.size()  # B, C, H, W
         down_rate = int(c.size(2)//width)
         c = F.interpolate(c, scale_factor=1./down_rate*self.rate, mode='nearest')
@@ -184,5 +99,51 @@ class GlobalAttention(nn.Module):
         feature_pruning = torch.bmm(self.value_conv(a).view(m_batchsize, -1, width * height),
                                     attention.permute(0, 2, 1))  # -. B, C, N
         out = feature_pruning.view(m_batchsize, C, width, height)  # B, C, H, W
-        out = self.gamma * a*c + (1.0 - c) * out
+        out = a * c + self.gamma *  (1.0 - c) * out
         return out
+
+
+class GlobalAttentionPatch(nn.Module):
+    """ Self attention Layer"""
+
+    def __init__(self, in_dim):
+        super(GlobalAttentionPatch, self).__init__()
+        self.chanel_in = in_dim
+
+        self.query_channel = nn.Conv2d(in_channels=in_dim, out_channels=in_dim, kernel_size=1)
+        self.key_channel = nn.Conv2d(in_channels=in_dim, out_channels=in_dim, kernel_size=1)
+        self.value_channel = nn.Conv2d(in_channels=in_dim, out_channels=in_dim, kernel_size=1)
+
+        self.softmax_channel = nn.Softmax(dim=-1)
+        self.gamma = torch.tensor([1.0], requires_grad=True).cuda()
+
+    def forward(self, x, y, m):
+        '''
+        Something
+        '''
+        feature_size = list(x.size())
+        # Channel attention
+        query_channel = self.query_channel(x).view(feature_size[0], -1, feature_size[2] * feature_size[3])
+        key_channel = self.key_channel(y).view(feature_size[0], -1, feature_size[2] * feature_size[3]).permute(0,
+                                                                                                               2,
+                                                                                                               1)
+        channel_correlation = torch.bmm(query_channel, key_channel)
+        m_r = m.view(feature_size[0], -1, feature_size[2]*feature_size[3])
+        channel_correlation = torch.bmm(channel_correlation, m_r)
+        energy_channel = self.softmax_channel(channel_correlation)
+        value_channel = self.value_channel(x).view(feature_size[0], -1, feature_size[2] * feature_size[3])
+        attented_channel = (energy_channel * value_channel).view(feature_size[0], feature_size[1],
+                                                                         feature_size[2],
+                                                                         feature_size[3])
+        out = x * m + self.gamma * (1.0 - m) * attented_channel
+        return out
+
+
+if __name__ == '__main__':
+    x = torch.rand(4, 128, 64, 64, requires_grad=True).float().cuda()
+    y = torch.rand(4, 1, 256, 256, requires_grad=False).float().cuda()
+    y[y > 0.5] = 1
+    y[y <= 0.5] = 0
+    net = GlobalLocalAttention(128).cuda()
+    out = net(x, y)
+    print(out.shape)
