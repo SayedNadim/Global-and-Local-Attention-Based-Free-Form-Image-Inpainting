@@ -44,8 +44,21 @@ class GlobalLocalAttention(nn.Module):
         int_bs = list(b.size())
         f_groups = torch.split(f, 1, dim=0)  # split tensors along the batch dimension
         b_groups = torch.split(b, 1, dim=0)  # split tensors along the batch dimension
-        m_groups = torch.split(mask, 1, dim=0)  # split tensors along the batch dimension
-        mask = m_groups[0]
+
+
+        # process mask
+        if mask is None:
+            mask = torch.zeros([int_bs[0], 1, int_bs[2], int_bs[3]])
+            if self.use_cuda:
+                mask = mask.cuda()
+        else:
+            down_rate = mask.shape[2] // int_bs[2]
+            mask = F.interpolate(mask, scale_factor=1. / (down_rate), mode='nearest')
+            if self.use_cuda:
+                mask = mask.cuda()
+
+        f = self.feature_attention(f, b, mask)
+
         # w shape: [N, C*k*k, L]
         w = extract_image_patches(b, ksizes=[self.ksize, self.ksize],
                                   strides=[self.stride, self.stride],
@@ -65,15 +78,9 @@ class GlobalLocalAttention(nn.Module):
         fw = fw.permute(0, 4, 1, 2, 3)  # w shape: [N, L, C, k, k]
         fw_groups = torch.split(fw, 1, dim=0)
 
-        # process mask
-        if mask is None:
-            mask = torch.zeros([int_bs[0], 1, int_bs[2], int_bs[3]])
-            if self.use_cuda:
-                mask = mask.cuda()
-        else:
-            down_rate = mask.shape[2] // int_bs[2]
-            mask = F.interpolate(mask, scale_factor=1. / (down_rate), mode='nearest')
-            mask = mask.cuda()
+
+        m_groups = torch.split(mask, 1, dim=0)  # split tensors along the batch dimension
+        mask = m_groups[0]
         int_ms = list(mask.size())
         # m shape: [N, C*k*k, L]
         m = extract_image_patches(mask, ksizes=[self.ksize, self.ksize],
@@ -103,16 +110,13 @@ class GlobalLocalAttention(nn.Module):
             fi = fi[0]
             wi = wi[0]
             # Patch Level Global Attention
-            m_batchsize_p, C_p, width_p, height_p = fi.size()
-            final_pruning_p = self.patch_attention(fi, wi, m)
+            final_pruning_p = self.patch_attention(wi, fi, m)
             max_wi = torch.max(torch.sqrt(reduce_sum(torch.pow(final_pruning_p, 2), axis=[1, 2, 3], keepdim=True)),
                                escape_NaN)
             wi_normed = final_pruning_p / max_wi
 
             # # Global Attention
-            m_batchsize, C, width, height = xi.size()  # B, C, H, W
-            final_pruning = self.feature_attention(xi, bi, mask)
-            final_pruning = same_padding(final_pruning, [self.ksize, self.ksize], [1, 1], [1, 1])  # xi: 1*c*H*W
+            final_pruning = same_padding(xi, [self.ksize, self.ksize], [1, 1], [1, 1])  # xi: 1*c*H*W
             yi = F.conv2d(final_pruning, wi_normed, stride=1)  # [1, L, H, W]
             if self.fuse:
                 # make all of depth to spatial resolution
@@ -154,8 +158,7 @@ class GlobalAttention(nn.Module):
         self.value_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim, kernel_size=1)
         self.softmax = nn.Softmax(dim=-1)  #
         self.rate = 1
-        self.gamma = torch.nn.Parameter(torch.Tensor([1.0]), requires_grad = True)
-        self.gamma.requires_grad = True
+        self.gamma = torch.tensor([1.0], requires_grad=True).cuda()
 
     def forward(self, a, b, c):
         """
@@ -181,5 +184,5 @@ class GlobalAttention(nn.Module):
         feature_pruning = torch.bmm(self.value_conv(a).view(m_batchsize, -1, width * height),
                                     attention.permute(0, 2, 1))  # -. B, C, N
         out = feature_pruning.view(m_batchsize, C, width, height)  # B, C, H, W
-        out = self.gamma * a*c + (1.0- c) * out
+        out = self.gamma * a*c + (1.0 - c) * out
         return out
