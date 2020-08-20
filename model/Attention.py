@@ -2,7 +2,9 @@ import torch
 import torch.nn as nn
 from utils.tools import *
 
-# Borrowed from IJCAI 2019 : "MUSICAL: Multi-Scale Image Contextual Attention Learning for Inpainting".
+# Contextual attention implementation is borrowed from IJCAI 2019 : "MUSICAL: Multi-Scale Image Contextual Attention Learning for Inpainting".
+# Removed mask-wise aggregation. Creates color inconsistency.
+# Original implementation causes bad results for Pytorch 1.2+. 
 class GlobalLocalAttention(nn.Module):
     def __init__(self, in_dim, patch_size=3, propagate_size=3, stride=1):
         super(GlobalLocalAttention, self).__init__()
