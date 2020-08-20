@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from utils.tools import *
 
-
+# Borrowed from IJCAI 2019 : "MUSICAL: Multi-Scale Image Contextual Attention Learning for Inpainting".
 class GlobalLocalAttention(nn.Module):
     def __init__(self, in_dim, patch_size=3, propagate_size=3, stride=1):
         super(GlobalLocalAttention, self).__init__()
