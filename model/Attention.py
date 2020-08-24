@@ -57,7 +57,7 @@ class GlobalLocalAttention(nn.Module):
             conv_kernels = conv_kernels / norm_factor
 
             conv_result = F.conv2d(feature_map, conv_kernels, padding=self.patch_size // 2)
-            print(conv_result.shape)
+#             print(conv_result.shape)
             if self.propagate_size != 1:
                 if self.prop_kernels is None:
                     self.prop_kernels = torch.ones([conv_result.size(1), 1, self.propagate_size, self.propagate_size])
