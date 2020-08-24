@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from utils.tools import *
 
 # Contextual attention implementation is borrowed from IJCAI 2019 : "MUSICAL: Multi-Scale Image Contextual Attention Learning for Inpainting".
-# Removed mask-wise aggregation. Creates color inconsistency.
-# Original implementation causes bad results for Pytorch 1.2+. 
+# Original implementation causes bad results for Pytorch 1.2+.
 class GlobalLocalAttention(nn.Module):
     def __init__(self, in_dim, patch_size=3, propagate_size=3, stride=1):
         super(GlobalLocalAttention, self).__init__()
@@ -57,13 +57,19 @@ class GlobalLocalAttention(nn.Module):
             conv_kernels = conv_kernels / norm_factor
 
             conv_result = F.conv2d(feature_map, conv_kernels, padding=self.patch_size // 2)
+            print(conv_result.shape)
             if self.propagate_size != 1:
                 if self.prop_kernels is None:
                     self.prop_kernels = torch.ones([conv_result.size(1), 1, self.propagate_size, self.propagate_size])
                     self.prop_kernels.requires_grad = False
                     self.prop_kernels = self.prop_kernels.cuda()
                 conv_result = F.conv2d(conv_result, self.prop_kernels, stride=1, padding=1, groups=conv_result.size(1))
+            mm = (torch.mean(mask_kernels_all[i], dim=[1,2,3], keepdim=True)==0.0).to(torch.float32)
+            mm = mm.permute(1,0,2,3).cuda()
+            conv_result = conv_result * mm
             attention_scores = F.softmax(conv_result, dim=1)
+            attention_scores = attention_scores * mm
+
             ##propagate the scores
             recovered_foreground = F.conv_transpose2d(attention_scores, conv_kernels, stride=1,
                                                       padding=self.patch_size // 2)
@@ -142,8 +148,8 @@ class GlobalAttentionPatch(nn.Module):
 
 
 if __name__ == '__main__':
-    x = torch.rand(4, 128, 64, 64, requires_grad=True).float().cuda()
-    y = torch.rand(4, 1, 256, 256, requires_grad=False).float().cuda()
+    x = torch.rand(3, 128, 64, 64, requires_grad=True).float().cuda()
+    y = torch.rand(3, 1, 256, 256, requires_grad=False).float().cuda()
     y[y > 0.5] = 1
     y[y <= 0.5] = 0
     net = GlobalLocalAttention(128).cuda()
