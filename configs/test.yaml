@@ -1,8 +1,8 @@
 # data parameters
 dataset_name: places2
-data_with_subfolder: True
-resume: False
-checkpoint_dir: /Code_Ground/local_global_attention/checkpoints/Places/hole_benchmark
+data_with_subfolder: False
+resume: True
+checkpoint_dir: /home/la-belva/code_ground/GGLA_places/checkpoints/Places/hole_benchmark
 batch_size: 1
 image_shape: [512, 680, 3]
 mask_shape: [128, 128]
@@ -12,7 +12,7 @@ margin: [0, 0]
 discounted_mask: True
 spatial_discounting_gamma: 0.9
 random_crop: True
-mask_type: hole
+mask_type: hole     # hole | mosaic
 mosaic_unit_size: 12
 
 # training parameters

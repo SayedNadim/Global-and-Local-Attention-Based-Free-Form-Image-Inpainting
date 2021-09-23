@@ -86,6 +86,94 @@ def extract_image_patches(images, ksizes, strides, rates, padding='same'):
     return patches  # [N, C*k*k, L], L is the total number of such blocks
 
 
+def random_bbox(config, batch_size):
+    """Generate a random tlhw with configuration.
+
+    Args:
+        config: Config should have configuration including img
+
+    Returns:
+        tuple: (top, left, height, width)
+
+    """
+    img_height, img_width, _ = config['image_shape']
+    h, w = config['mask_shape']
+    margin_height, margin_width = config['margin']
+    maxt = img_height - margin_height - h
+    maxl = img_width - margin_width - w
+    bbox_list = []
+    if config['mask_batch_same']:
+        t = np.random.randint(margin_height, maxt)
+        l = np.random.randint(margin_width, maxl)
+        bbox_list.append((t, l, h, w))
+        bbox_list = bbox_list * batch_size
+    else:
+        for i in range(batch_size):
+            t = np.random.randint(margin_height, maxt)
+            l = np.random.randint(margin_width, maxl)
+            bbox_list.append((t, l, h, w))
+
+    return torch.tensor(bbox_list, dtype=torch.int64)
+
+
+def test_bbox(config, batch_size, t, l):
+    """Generate a random tlhw with configuration.
+
+    Args:
+        config: Config should have configuration including img
+
+    Returns:
+        tuple: (top, left, height, width)
+
+    """
+    img_height, img_width, _ = config['image_shape']
+    h, w = config['mask_shape']
+    margin_height, margin_width = config['margin']
+    maxt = img_height - margin_height - h
+    maxl = img_width - margin_width - w
+    bbox_list = []
+    if config['mask_batch_same']:
+        t = t
+        l = l
+        bbox_list.append((t, l, h, w))
+        bbox_list = bbox_list * batch_size
+    else:
+        for i in range(batch_size):
+            t = t
+            l = l
+            bbox_list.append((t, l, h, w))
+
+    return torch.tensor(bbox_list, dtype=torch.int64)
+
+def test_random_bbox():
+    image_shape = [256, 256, 3]
+    mask_shape = [128, 128]
+    margin = [0, 0]
+    bbox = random_bbox(image_shape)
+    return bbox
+
+
+def bbox2mask(bboxes, height, width, max_delta_h, max_delta_w):
+    batch_size = bboxes.size(0)
+    mask = torch.zeros((batch_size, 1, height, width), dtype=torch.float32)
+    for i in range(batch_size):
+        bbox = bboxes[i]
+        delta_h = np.random.randint(max_delta_h // 2 + 1)
+        delta_w = np.random.randint(max_delta_w // 2 + 1)
+        mask[i, :, bbox[0] + delta_h:bbox[0] + bbox[2] - delta_h, bbox[1] + delta_w:bbox[1] + bbox[3] - delta_w] = 1.
+    return mask
+
+
+def test_bbox2mask():
+    image_shape = [256, 256, 3]
+    mask_shape = [128, 128]
+    margin = [0, 0]
+    max_delta_shape = [32, 32]
+    bbox = random_bbox(image_shape)
+    mask = bbox2mask(bbox, image_shape[0], image_shape[1], max_delta_shape[0], max_delta_shape[1])
+    return mask
+
+
 def local_patch(x, bbox_list):
     assert len(x.size()) == 4
     patches = []
@@ -93,6 +181,158 @@ def local_patch(x, bbox_list):
         t, l, h, w = bbox
         patches.append(x[i, :, t:t + h, l:l + w])
     return torch.stack(patches, dim=0)
+
+
+def random_mask(max_mask, height=256, width=256, pad=50,
+                min_stroke=3, max_stroke=7,
+                min_vertex=5, max_vertex=12,
+                min_brush_width=10, max_brush_width=30,
+                min_lenght=10, max_length=30):
+    mask = np.zeros((height, width))
+    mask_all = []
+    max_angle = 2 * np.pi
+    num_stroke = np.random.randint(min_stroke, max_stroke + 1)
+    for mn in range(max_mask):
+        for _ in range(num_stroke):
+            num_vertex = np.random.randint(min_vertex, max_vertex + 1)
+            brush_width = np.random.randint(min_brush_width, max_brush_width + 1)
+            start_x = np.random.randint(pad, height - pad)
+            start_y = np.random.randint(pad, width - pad)
+
+            for _ in range(num_vertex):
+                angle = np.random.uniform(max_angle//3, max_angle)
+                length = np.random.randint(min_lenght, max_length + 1)
+                # length = np.random.randint(min_lenght, height//num_vertex)
+                end_x = (start_x + length * np.sin(angle)).astype(np.int32)
+                end_y = (start_y + length * np.cos(angle)).astype(np.int32)
+                end_x = max(0, min(end_x, height))
+                end_y = max(0, min(end_y, width))
+
+                cv2.line(mask, (start_x, start_y), (end_x, end_y), 1., brush_width)
+
+                start_x, start_y = end_x, end_y
+            if np.random.random() < 0.3:
+                mask = np.fliplr(mask)
+            if np.random.random() > 0.3 and np.random.random()<0.7:
+                mask = np.flip(mask)
+            if np.random.random() > 0.7:
+                mask = np.flipud(mask)
+        mask_all.append(mask)
+    batched_mask = torch.tensor(mask_all, dtype=torch.float32).unsqueeze(1)
+    return batched_mask
+
+def test_random_mask(config, pad=50,
+                min_stroke=2, max_stroke=5,
+                min_vertex=2, max_vertex=12,
+                min_brush_width=7, max_brush_width=20,
+                min_lenght=10, max_length=50):
+    height, width, _ = config['image_shape']
+    mask = np.zeros((height, width))
+    mask_all = []
+    max_angle = 2 * np.pi
+    num_stroke = max_stroke
+    for mn in range(config['batch_size']):
+        for _ in range(num_stroke):
+            num_vertex = max_vertex - min_vertex//2
+            brush_width = max_brush_width - min_brush_width//2
+            start_x = 70
+            start_y = 100
+
+            for _ in range(num_vertex):
+                angle = max_angle * 0.75
+                length = max_length - min_lenght //2
+                # length = np.random.randint(min_lenght, height//num_vertex)
+                end_x = (start_x + length * np.sin(angle)).astype(np.int32)
+                end_y = (start_y + length * np.cos(angle)).astype(np.int32)
+                end_x = max(0, min(end_x, height))
+                end_y = max(0, min(end_y, width))
+
+                cv2.line(mask, (start_x, start_y), (end_x, end_y), 1., brush_width)
+
+                start_x, start_y = end_x, end_y
+
+        # if np.random.random() < 0.5:
+        #     mask = np.fliplr(mask)
+        # if np.random.random() < 0.5:
+        #     mask = np.flipud(mask)
+        mask_all.append(mask)
+    batched_mask = torch.tensor(mask_all, dtype=torch.float32).unsqueeze(1)
+    return batched_mask
+
+def mask_image(x, bboxes, config):
+    height, width, _ = config['image_shape']
+    max_delta_h, max_delta_w = config['max_delta_shape']
+    max_mask = x.shape[0]
+    # mask = bbox2mask(bboxes, height, width, max_delta_h, max_delta_w)
+    mask = random_mask(max_mask)
+    if x.is_cuda:
+        mask = mask.cuda()
+
+    if config['mask_type'] == 'hole':
+        result = x * (1. - mask)
+    elif config['mask_type'] == 'mosaic':
+        mosaic_unit_size = config['mosaic_unit_size']
+        downsampled_image = F.interpolate(x, scale_factor=1. / mosaic_unit_size, mode='nearest')
+        upsampled_image = F.interpolate(downsampled_image, size=(height, width), mode='nearest')
+        result = upsampled_image * mask + x * (1. - mask)
+    else:
+        raise NotImplementedError('Not implemented mask type.')
+
+    return result, mask
+
+def test_mask_image(x, bboxes, config):
+    height, width, _ = config['image_shape']
+    max_delta_h, max_delta_w = config['max_delta_shape']
+    # mask = bbox2mask(bboxes, height, width, max_delta_h, max_delta_w)
+    mask = test_random_mask(config)
+    if x.is_cuda:
+        mask = mask.cuda()
+
+    if config['mask_type'] == 'hole':
+        result = x * (1. - mask)
+    elif config['mask_type'] == 'mosaic':
+        mosaic_unit_size = config['mosaic_unit_size']
+        downsampled_image = F.interpolate(x, scale_factor=1. / mosaic_unit_size, mode='nearest')
+        upsampled_image = F.interpolate(downsampled_image, size=(height, width), mode='nearest')
+        result = upsampled_image * mask + x * (1. - mask)
+    else:
+        raise NotImplementedError('Not implemented mask type.')
+
+    return result, mask
+
+
+def spatial_discounting_mask(config):
+    """Generate spatial discounting mask constant.
+
+    Spatial discounting mask is first introduced in publication:
+        Generative Image Inpainting with Contextual Attention, Yu et al.
+
+    Args:
+        config: Config should have configuration including HEIGHT, WIDTH,
+            DISCOUNTED_MASK.
+
+    Returns:
+        tf.Tensor: spatial discounting mask
+
+    """
+    gamma = config['spatial_discounting_gamma']
+    height, width = config['mask_shape']
+    shape = [1, 1, height, width]
+    if config['discounted_mask']:
+        mask_values = np.ones((height, width))
+        for i in range(height):
+            for j in range(width):
+                mask_values[i, j] = max(
+                    gamma ** min(i, height - i),
+                    gamma ** min(j, width - j))
+        mask_values = np.expand_dims(mask_values, 0)
+        mask_values = np.expand_dims(mask_values, 0)
+    else:
+        mask_values = np.ones(shape)
+    spatial_discounting_mask_tensor = torch.tensor(mask_values, dtype=torch.float32)
+    if config['cuda']:
+        spatial_discounting_mask_tensor = spatial_discounting_mask_tensor.cuda()
+    return spatial_discounting_mask_tensor
 
 
 def reduce_mean(x, axis=None, keepdim=False):
@@ -117,6 +357,231 @@ def reduce_sum(x, axis=None, keepdim=False):
     for i in sorted(axis, reverse=True):
         x = torch.sum(x, dim=i, keepdim=keepdim)
     return x
+
+
+def flow_to_image(flow):
+    """Transfer flow map to image.
+    Part of code forked from flownet.
+    """
+    out = []
+    maxu = -999.
+    maxv = -999.
+    minu = 999.
+    minv = 999.
+    maxrad = -1
+    for i in range(flow.shape[0]):
+        u = flow[i, :, :, 0]
+        v = flow[i, :, :, 1]
+        idxunknow = (abs(u) > 1e7) | (abs(v) > 1e7)
+        u[idxunknow] = 0
+        v[idxunknow] = 0
+        maxu = max(maxu, np.max(u))
+        minu = min(minu, np.min(u))
+        maxv = max(maxv, np.max(v))
+        minv = min(minv, np.min(v))
+        rad = np.sqrt(u ** 2 + v ** 2)
+        maxrad = max(maxrad, np.max(rad))
+        u = u / (maxrad + np.finfo(float).eps)
+        v = v / (maxrad + np.finfo(float).eps)
+        img = compute_color(u, v)
+        out.append(img)
+    return np.float32(np.uint8(out))
+
+
+def pt_flow_to_image(flow):
+    """Transfer flow map to image.
+    Part of code forked from flownet.
+    """
+    out = []
+    maxu = torch.tensor(-999)
+    maxv = torch.tensor(-999)
+    minu = torch.tensor(999)
+    minv = torch.tensor(999)
+    maxrad = torch.tensor(-1)
+    if torch.cuda.is_available():
+        maxu = maxu.cuda()
+        maxv = maxv.cuda()
+        minu = minu.cuda()
+        minv = minv.cuda()
+        maxrad = maxrad.cuda()
+    for i in range(flow.shape[0]):
+        u = flow[i, 0, :, :]
+        v = flow[i, 1, :, :]
+        idxunknow = (torch.abs(u) > 1e7) + (torch.abs(v) > 1e7)
+        u[idxunknow] = 0
+        v[idxunknow] = 0
+        maxu = torch.max(maxu, torch.max(u))
+        minu = torch.min(minu, torch.min(u))
+        maxv = torch.max(maxv, torch.max(v))
+        minv = torch.min(minv, torch.min(v))
+        rad = torch.sqrt((u ** 2 + v ** 2).float()).to(torch.int64)
+        maxrad = torch.max(maxrad, torch.max(rad))
+        u = u / (maxrad + torch.finfo(torch.float32).eps)
+        v = v / (maxrad + torch.finfo(torch.float32).eps)
+        img = pt_compute_color(u, v)
+        out.append(img)
+
+    return torch.stack(out, dim=0)
+
+
+def highlight_flow(flow):
+    """Convert flow into middlebury color code image.
+    """
+    out = []
+    s = flow.shape
+    for i in range(flow.shape[0]):
+        img = np.ones((s[1], s[2], 3)) * 144.
+        u = flow[i, :, :, 0]
+        v = flow[i, :, :, 1]
+        for h in range(s[1]):
+            for w in range(s[1]):
+                ui = u[h, w]
+                vi = v[h, w]
+                img[ui, vi, :] = 255.
+        out.append(img)
+    return np.float32(np.uint8(out))
+
+
+def pt_highlight_flow(flow):
+    """Convert flow into middlebury color code image.
+        """
+    out = []
+    s = flow.shape
+    for i in range(flow.shape[0]):
+        img = np.ones((s[1], s[2], 3)) * 144.
+        u = flow[i, :, :, 0]
+        v = flow[i, :, :, 1]
+        for h in range(s[1]):
+            for w in range(s[1]):
+                ui = u[h, w]
+                vi = v[h, w]
+                img[ui, vi, :] = 255.
+        out.append(img)
+    return np.float32(np.uint8(out))
+
+
+def compute_color(u, v):
+    h, w = u.shape
+    img = np.zeros([h, w, 3])
+    nanIdx = np.isnan(u) | np.isnan(v)
+    u[nanIdx] = 0
+    v[nanIdx] = 0
+    # colorwheel = COLORWHEEL
+    colorwheel = make_color_wheel()
+    ncols = np.size(colorwheel, 0)
+    rad = np.sqrt(u ** 2 + v ** 2)
+    a = np.arctan2(-v, -u) / np.pi
+    fk = (a + 1) / 2 * (ncols - 1) + 1
+    k0 = np.floor(fk).astype(int)
+    k1 = k0 + 1
+    k1[k1 == ncols + 1] = 1
+    f = fk - k0
+    for i in range(np.size(colorwheel, 1)):
+        tmp = colorwheel[:, i]
+        col0 = tmp[k0 - 1] / 255
+        col1 = tmp[k1 - 1] / 255
+        col = (1 - f) * col0 + f * col1
+        idx = rad <= 1
+        col[idx] = 1 - rad[idx] * (1 - col[idx])
+        notidx = np.logical_not(idx)
+        col[notidx] *= 0.75
+        img[:, :, i] = np.uint8(np.floor(255 * col * (1 - nanIdx)))
+    return img
+
+
+def pt_compute_color(u, v):
+    h, w = u.shape
+    img = torch.zeros([3, h, w])
+    if torch.cuda.is_available():
+        img = img.cuda()
+    nanIdx = (torch.isnan(u) + torch.isnan(v)) != 0
+    u[nanIdx] = 0.
+    v[nanIdx] = 0.
+    # colorwheel = COLORWHEEL
+    colorwheel = pt_make_color_wheel()
+    if torch.cuda.is_available():
+        colorwheel = colorwheel.cuda()
+    ncols = colorwheel.size()[0]
+    rad = torch.sqrt((u ** 2 + v ** 2).to(torch.float32))
+    a = torch.atan2(-v.to(torch.float32), -u.to(torch.float32)) / np.pi
+    fk = (a + 1) / 2 * (ncols - 1) + 1
+    k0 = torch.floor(fk).to(torch.int64)
+    k1 = k0 + 1
+    k1[k1 == ncols + 1] = 1
+    f = fk - k0.to(torch.float32)
+    for i in range(colorwheel.size()[1]):
+        tmp = colorwheel[:, i]
+        col0 = tmp[k0 - 1]
+        col1 = tmp[k1 - 1]
+        col = (1 - f) * col0 + f * col1
+        idx = rad <= 1. / 255.
+        col[idx] = 1 - rad[idx] * (1 - col[idx])
+        notidx = (idx != 0)
+        col[notidx] *= 0.75
+        img[i, :, :] = col * (1 - nanIdx).to(torch.float32)
+    return img
+
+
+def make_color_wheel():
+    RY, YG, GC, CB, BM, MR = (15, 6, 4, 11, 13, 6)
+    ncols = RY + YG + GC + CB + BM + MR
+    colorwheel = np.zeros([ncols, 3])
+    col = 0
+    # RY
+    colorwheel[0:RY, 0] = 255
+    colorwheel[0:RY, 1] = np.transpose(np.floor(255 * np.arange(0, RY) / RY))
+    col += RY
+    # YG
+    colorwheel[col:col + YG, 0] = 255 - np.transpose(np.floor(255 * np.arange(0, YG) / YG))
+    colorwheel[col:col + YG, 1] = 255
+    col += YG
+    # GC
+    colorwheel[col:col + GC, 1] = 255
+    colorwheel[col:col + GC, 2] = np.transpose(np.floor(255 * np.arange(0, GC) / GC))
+    col += GC
+    # CB
+    colorwheel[col:col + CB, 1] = 255 - np.transpose(np.floor(255 * np.arange(0, CB) / CB))
+    colorwheel[col:col + CB, 2] = 255
+    col += CB
+    # BM
+    colorwheel[col:col + BM, 2] = 255
+    colorwheel[col:col + BM, 0] = np.transpose(np.floor(255 * np.arange(0, BM) / BM))
+    col += + BM
+    # MR
+    colorwheel[col:col + MR, 2] = 255 - np.transpose(np.floor(255 * np.arange(0, MR) / MR))
+    colorwheel[col:col + MR, 0] = 255
+    return colorwheel
+
+
+def pt_make_color_wheel():
+    RY, YG, GC, CB, BM, MR = (15, 6, 4, 11, 13, 6)
+    ncols = RY + YG + GC + CB + BM + MR
+    colorwheel = torch.zeros([ncols, 3])
+    col = 0
+    # RY
+    colorwheel[0:RY, 0] = 1.
+    colorwheel[0:RY, 1] = torch.arange(0, RY, dtype=torch.float32) / RY
+    col += RY
+    # YG
+    colorwheel[col:col + YG, 0] = 1. - (torch.arange(0, YG, dtype=torch.float32) / YG)
+    colorwheel[col:col + YG, 1] = 1.
+    col += YG
+    # GC
+    colorwheel[col:col + GC, 1] = 1.
+    colorwheel[col:col + GC, 2] = torch.arange(0, GC, dtype=torch.float32) / GC
+    col += GC
+    # CB
+    colorwheel[col:col + CB, 1] = 1. - (torch.arange(0, CB, dtype=torch.float32) / CB)
+    colorwheel[col:col + CB, 2] = 1.
+    col += CB
+    # BM
+    colorwheel[col:col + BM, 2] = 1.
+    colorwheel[col:col + BM, 0] = torch.arange(0, BM, dtype=torch.float32) / BM
+    col += BM
+    # MR
+    colorwheel[col:col + MR, 2] = 1. - (torch.arange(0, MR, dtype=torch.float32) / MR)
+    colorwheel[col:col + MR, 0] = 1.
+    return colorwheel
 
 
 def is_image_file(filename):
@@ -153,3 +618,14 @@ def get_model_list(dirname, key, iteration=0):
                 return model_name
         raise ValueError('Not found models with this iteration')
     return last_model_name
+
+
+
+if __name__ == '__main__':
+    test_random_bbox()
+    mask = test_bbox2mask()
+    print(mask.shape)
+    import matplotlib.pyplot as plt
+
+    plt.imshow(mask, cmap='gray')
+    plt.show()

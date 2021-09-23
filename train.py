@@ -7,13 +7,13 @@ from argparse import ArgumentParser
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
+import torchvision.utils as vutils
 from tensorboardX import SummaryWriter
 
-from scripts.trainer import Trainer
-from data.dataset_loader import Dataset
-from utils.tools import get_config
+from trainer import Trainer
+from data.dataset import Dataset
+from utils.tools import get_config, random_bbox, mask_image, random_mask
 from utils.logger import get_logger
-from model.mask import mask_image
 
 parser = ArgumentParser()
 parser.add_argument('--config', type=str, default='configs/config.yaml',
@@ -65,16 +65,23 @@ def main():
                                 with_subfolder=config['data_with_subfolder'],
                                 image_shape=config['image_shape'],
                                 random_crop=config['random_crop'])
-
+        # val_dataset = Dataset(data_path=config['val_data_path'],
+        #                       with_subfolder=config['data_with_subfolder'],
+        #                       image_size=config['image_size'],
+        #                       random_crop=config['random_crop'])
         train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
                                                    batch_size=config['batch_size'],
                                                    shuffle=True,
                                                    num_workers=config['num_workers'])
-
+        # val_loader = torch.utils.data.DataLoader(dataset=val_dataset,
+        #                                           batch_size=config['batch_size'],
+        #                                           shuffle=False,
+        #                                           num_workers=config['num_workers'])
 
         # Define the trainer
         trainer = Trainer(config)
         logger.info(f"\n{trainer.netG}")
+        # logger.info(f"\n{trainer.localD}")
         logger.info(f"\n{trainer.globalD}")
 
         if cuda:
@@ -98,14 +105,15 @@ def main():
                 ground_truth = iterable_train_loader.next()
 
             # Prepare the inputs
-            x, mask = mask_image(ground_truth, config)
+            bboxes = random_bbox(config, batch_size=ground_truth.size(0))
+            x, mask = mask_image(ground_truth, bboxes, config)
             if cuda:
                 x = x.cuda()
                 mask = mask.cuda()
                 ground_truth = ground_truth.cuda()
 
             ###### Forward pass ######
-            losses, coarse_result, inpainted_result = trainer(x, mask, ground_truth)
+            losses, coarse_result, inpainted_result = trainer(x, bboxes, mask, ground_truth)
             # Scalars from different devices are gathered into vectors
             for k in losses.keys():
                 if not losses[k].dim() == 0:
@@ -114,13 +122,13 @@ def main():
             ###### Backward pass ######
             # Update D
             trainer_module.optimizer_d.zero_grad()
-            losses['d'] = losses['d_loss_rel'] +  losses['d_loss_loren']
+            losses['d'] = losses['d_loss_rel'] +  losses['d_loss_loren'] # + losses['d_loss_rel_local'] + losses['d_loss_rel_global'] #+ losses['d_loss_loren'] + losses['wgan_d'] + losses['wgan_gp'] * config['wgan_gp_lambda']
             losses['d'].backward(retain_graph=True)
             trainer_module.optimizer_d.step()
 
             # Update G
             trainer_module.optimizer_g.zero_grad()
-            losses['g'] = losses['l1'] * config['l1_loss_alpha']  +  losses['g_loss_rel']  + losses['g_loss_loren']
+            losses['g'] = losses['l1'] * config['l1_loss_alpha']  +  losses['g_loss_rel']  + losses['g_loss_loren'] # + losses['g_loss_rel_local'] + losses['g_loss_rel_global'] # + losses['g_loss_loren'] + losses['wgan_g'] * config['gan_loss_alpha']
             losses['g'].backward()
             trainer_module.optimizer_g.step()
 
@@ -139,13 +147,21 @@ def main():
                     message += '%s: %.6f ' % (k, v)
                 message += speed_msg
                 logger.info(message)
+                # writer.add_scalar('recon/l1', losses['l1'], iteration+1)
+                # writer.add_scalar('recon/ae', losses['ae'], iteration+1)
+                # writer.add_scalar('g/wgan_g', losses['wgan_g'], iteration+1)
+                # writer.add_scalar('g/g', losses['g'], iteration+1)
+                # writer.add_scalar('g/wgan_gp', losses['wgan_gp'], iteration+1)
+                # writer.add_scalar('d/wgan_d', losses['wgan_d'], iteration+1)
+                # writer.add_scalar('d/d', losses['d'], iteration+1)
+
             def denorm(x):
                 out = (x + 1) / 2  # [-1,1] -> [0,1]
                 return out.clamp_(0, 1)
 
             if iteration % (config['viz_iter']) == 0:
-                ims = torch.cat([x, coarse_result, inpainted_result, ground_truth], dim=3)
-                writer.add_image('raw_masked_coarse_refine', denorm(ims), iteration)
+                ims = torch.cat([ground_truth, x, coarse_result, inpainted_result], dim=3)
+                writer.add_images('raw_masked_coarse_refine', denorm(ims), iteration + 1)
             # if iteration % (config['save_image']) ==0:
             #     viz_max_out = config['viz_max_out']
             #     if x.size(0) > viz_max_out:
