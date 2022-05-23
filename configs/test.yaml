@@ -2,7 +2,7 @@
 dataset_name: places2
 data_with_subfolder: False
 resume: True
-checkpoint_dir: /home/la-belva/code_ground/GGLA_places/checkpoints/Places/hole_benchmark
+checkpoint_dir: /checkpoints/Places/hole_benchmark
 batch_size: 1
 image_shape: [512, 680, 3]
 mask_shape: [128, 128]
